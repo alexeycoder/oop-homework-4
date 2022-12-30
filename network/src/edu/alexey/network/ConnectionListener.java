@@ -10,6 +10,15 @@ public interface ConnectionListener {
 	void onConnectionReady(Connection connection);
 
 	/**
+	 * Событие, возникающее когда клиент представляется серверу, непосредственно
+	 * сразу после установления соединения.
+	 * 
+	 * @param connection   Источник события -- соединение.
+	 * @param subscriberId Какой-либо идентификатор клиента чата.
+	 */
+	void onAuthenticate(Connection connection, String subscriberId);
+
+	/**
 	 * Событие, возникающее когда слушатель принимает строку данных.
 	 * 
 	 * @param connection Источник события -- соединение.

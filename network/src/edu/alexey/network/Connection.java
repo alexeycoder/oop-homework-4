@@ -14,7 +14,9 @@ import java.nio.charset.Charset;
  */
 public class Connection {
 	public static final Charset CHARSET = Charset.forName("UTF-8");
-	public static final String MESSAGE_END = "\r\n";
+	public static final String MESSAGE_END = System.lineSeparator(); // "\r\n";
+	public static final String AUTH_MESSAGE_PREFIX = "\0AUTH:\0";
+	public static final String NEWLINE_PLACEHOLDER = "\0:NL:\0";
 
 	/** Слушатель событий, предоставляемый создателем соединения. */
 	private final ConnectionListener eventListener;
@@ -51,60 +53,81 @@ public class Connection {
 		var outputWriter = new OutputStreamWriter(socket.getOutputStream(), CHARSET);
 		this.out = new BufferedWriter(outputWriter);
 
-		this.rxThread = new Thread(new Runnable() {
-
-			@Override
-			public void run() {
-				try {
-					eventListener.onConnectionReady(Connection.this);
-					while (!rxThread.isInterrupted()) {
-
-						// StringBuilder sb = new StringBuilder();
-						// int breakCharInt = '\n';
-						// while (true) {
-						// int ci = in.read();
-						// System.out.println(ci + " ");
-						// if (ci == breakCharInt) {
-						// break;
-						// } else if (ci < 0) {
-						// continue;// must be exit
-						// } else {
-						// sb.append(Character.toChars(ci));
-						// }
-						// }
-						// var msg = sb.toString();
-
-						var msg = in.readLine();
-						if (msg == null) {
-							disconnect();
-							return;
-						}
-
-						System.out.println("Соединение: получена строка:");
-						System.out.println(msg);
-
-						eventListener.onReceiveMessage(Connection.this, msg);
-					}
-				} catch (IOException ex) {
-					eventListener.onException(Connection.this, ex);
-				} finally {
-					isClosed = true;
-					eventListener.onDisconnect(Connection.this);
-				}
-			}
-		});
+		this.rxThread = new Thread(this::listening);
 		this.rxThread.start();
 		this.isClosed = false;
 	}
 
+	private void listening() {
+		try {
+			eventListener.onConnectionReady(Connection.this);
+			String msg = in.readLine();
+			if (msg != null && msg.startsWith(AUTH_MESSAGE_PREFIX)) {
+				eventListener.onAuthenticate(this, msg.substring(AUTH_MESSAGE_PREFIX.length()));
+				msg = null;
+			}
+
+			while (!rxThread.isInterrupted()) {
+
+				// StringBuilder sb = new StringBuilder();
+				// int breakCharInt = '\n';
+				// while (true) {
+				// int ci = in.read();
+				// System.out.println(ci + " ");
+				// if (ci == breakCharInt) {
+				// break;
+				// } else if (ci < 0) {
+				// continue;// must be exit
+				// } else {
+				// sb.append(Character.toChars(ci));
+				// }
+				// }
+				// var msg = sb.toString();
+
+				if (msg == null) {
+					msg = in.readLine();
+					if (msg == null) {
+						disconnect();
+						return;
+					}
+				}
+				msg = decode(msg);
+
+				System.out.println("Соединение: получена строка:");
+				System.out.println(msg);
+
+				eventListener.onReceiveMessage(this, msg);
+				msg = null;
+			}
+		} catch (IOException ex) {
+			eventListener.onException(this, ex);
+		} finally {
+			isClosed = true;
+			eventListener.onDisconnect(this);
+		}
+	}
+
+	public synchronized void authenticate(String yourId) {
+		sendMessage(AUTH_MESSAGE_PREFIX + yourId);
+	}
+
 	public synchronized void sendMessage(String message) {
 		try {
+			message = encode(message);
 			out.write(message + MESSAGE_END);
 			out.flush();
 		} catch (IOException ex) {
 			eventListener.onException(Connection.this, ex);
 			disconnect();
 		}
+	}
+
+	private String encode(String message) {
+		return message.replace(MESSAGE_END, NEWLINE_PLACEHOLDER);
+	}
+
+	private String decode(String message) {
+		return message.replace(NEWLINE_PLACEHOLDER, MESSAGE_END);
 	}
 
 	public synchronized void disconnect() {
