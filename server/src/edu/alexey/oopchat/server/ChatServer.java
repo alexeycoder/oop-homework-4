@@ -10,13 +10,11 @@ import edu.alexey.network.ConnectionListener;
 
 /** Сервер Чата. */
 public class ChatServer implements ConnectionListener {
-	static final int PORT = 5177;
-
 	private final List<NamedConnection> namedConnections = new ArrayList<>();
 
 	ChatServer() {
 		System.out.println("Сервер чата: старт.");
-		try (ServerSocket serverSocket = new ServerSocket(PORT)) {
+		try (ServerSocket serverSocket = new ServerSocket(Settings.PORT)) {
 
 			while (true) {
 				try {
